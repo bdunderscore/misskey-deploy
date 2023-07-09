@@ -1,0 +1,95 @@
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: db-backup
+spec:
+  schedule: "37 4 * * *"
+  timeZone: Asia/Tokyo
+  jobTemplate:
+    spec:
+      template:
+        spec:
+          volumes:
+            - name: dump
+              emptyDir: {}
+          initContainers:
+          - name: pgdump
+            image: postgres:15.3
+            imagePullPolicy: IfNotPresent
+            volumeMounts:
+            - mountPath: /mnt
+              name: dump
+            resources:
+              requests:
+                memory: "100Mi"
+                cpu: "250m"
+              limits:
+                memory: "1Gi"
+                cpu: "250m"
+            command:
+            - pg_dump
+            - "-c"
+            - "-C"
+            - "-v"
+            - "-Z"
+            - "9"
+            - "--no-sync"
+            - "-f"
+            - "/mnt/dump.sql.gz"
+            - "postgresql://$(DB_USER)@$(DB_HOST):$(DB_PORT)/$(DB_NAME)?sslmode=require"
+            env:
+              - name: PGPASSWORD
+                valueFrom:
+                  secretKeyRef:
+                    name: misskey-db
+                    key: password
+              - name: DB_USER
+                valueFrom:
+                  secretKeyRef:
+                    name: misskey-db
+                    key: user
+              - name: DB_HOST
+                valueFrom:
+                  secretKeyRef:
+                    name: misskey-db
+                    key: host
+              - name: DB_PORT
+                valueFrom:
+                  secretKeyRef:
+                    name: db-backup
+                    key: port
+              - name: DB_NAME
+                valueFrom:
+                  secretKeyRef:
+                    name: misskey-db
+                    key: dbname
+          containers:
+          - name: upload
+            image: amazon/aws-cli
+            imagePullPolicy: IfNotPresent
+            volumeMounts:
+            - mountPath: /mnt
+              name: dump
+            command:
+            - aws
+            - s3
+            - cp
+            - "/mnt/dump.sql.gz"
+            - "$(S3_URI)"
+            env:
+            - name: AWS_ACCESS_KEY_ID
+              valueFrom:
+                secretKeyRef:
+                  name: db-backup
+                  key: AWS_ACCESS_KEY_ID
+            - name: AWS_SECRET_ACCESS_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: db-backup
+                  key: AWS_SECRET_ACCESS_KEY
+            - name: S3_URI
+              valueFrom:
+                secretKeyRef:
+                  name: db-backup
+                  key: S3_URI
+          restartPolicy: Never

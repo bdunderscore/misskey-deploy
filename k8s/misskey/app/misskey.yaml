@@ -1,0 +1,122 @@
+# registry.digitalocean.com/nadena-dev-sgp1/misskey:current
+# registry.digitalocean.com/nadena-dev-sgp1/misskey-config:current
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: misskey-backend
+spec:
+  selector:
+    app: misskey
+  ports:
+  - port: 3000
+    targetPort: 3000
+    protocol: TCP
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: misskey-ingress
+spec:
+  ingressClassName: nginx
+  rules:
+    - host: msky.nadena.dev
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: misskey-backend
+                port:
+                  number: 3000
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: misskey
+spec:
+  selector:
+    matchLabels:
+      app: misskey
+  replicas: 2
+  template:
+    metadata:
+      labels:
+        app: misskey
+    spec:
+      initContainers:
+      - name: init-misskey
+        image: registry.digitalocean.com/nadena-dev-sgp1/misskey-config:latest
+        volumeMounts:
+        - mountPath: /config
+          name: config
+        imagePullPolicy: Always
+        env:
+          - name: MISSKEY_URL
+            value: "https://msky.nadena.dev"
+          - name: POSTGRES_DB
+            valueFrom:
+              secretKeyRef:
+                name: misskey-db
+                key: dbname
+          - name: POSTGRES_USER
+            valueFrom:
+              secretKeyRef:
+                name: misskey-db
+                key: user
+          - name: POSTGRES_PASSWORD
+            valueFrom:
+              secretKeyRef:
+                name: misskey-db
+                key: password
+          - name: POSTGRES_HOST
+            valueFrom:
+              secretKeyRef:
+                name: misskey-db
+                key: host
+                #key: pgbouncer-host
+          - name: POSTGRES_PORT
+            valueFrom:
+              secretKeyRef:
+                name: misskey-db
+                key: port
+                #key: pgbouncer-port
+      containers:
+      - name: misskey
+        image: registry.digitalocean.com/nadena-dev-sgp1/misskey:latest
+        imagePullPolicy: Always
+        env:
+          - name: NODE_TLS_REJECT_UNAUTHORIZED
+            value: "0"
+        resources:
+          requests:
+            memory: "2000M"
+            cpu: "500m"
+          limits:
+            memory: "4G"
+        ports:
+        - containerPort: 3000
+        volumeMounts:
+        - mountPath: /misskey/.config
+          name: config
+        - mountPath: /misskey/files
+          name: files
+        startupProbe:
+          httpGet:
+            path: /
+            port: 3000
+          failureThreshold: 900
+          periodSeconds: 5
+        livenessProbe:
+          httpGet:
+            path: /
+            port: 3000
+          failureThreshold: 3
+          periodSeconds: 10
+      volumes:
+      - name: config
+        emptyDir: {}
+      - name: files
+        emptyDir: {}

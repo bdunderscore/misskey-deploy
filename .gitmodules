@@ -1,3 +1,6 @@
 [submodule "k8s/postgres-operator-examples"]
 	path = k8s/postgres-operator-examples
 	url = https://github.com/CrunchyData/postgres-operator-examples
+[submodule "misskey"]
+	path = misskey
+	url = https://github.com/bdunderscore/misskey.git

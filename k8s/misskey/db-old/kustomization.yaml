@@ -1,0 +1,10 @@
+resources:
+- postgres.yaml
+
+secretGenerator:
+- name: misskey-db
+  files:
+  - misskey-db.conf
+
+generatorOptions:
+  disableNameSuffixHash: true

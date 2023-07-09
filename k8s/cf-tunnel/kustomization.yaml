@@ -1,0 +1,3 @@
+resources:
+- tunnel.yaml
+namespace: cf-tunnel

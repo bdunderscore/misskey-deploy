@@ -1,0 +1,91 @@
+apiVersion: postgres-operator.crunchydata.com/v1beta1
+kind: PostgresCluster
+metadata:
+  name: misskey-db
+spec:
+  image: registry.developers.crunchydata.com/crunchydata/crunchy-postgres:ubi8-15.3-0
+  postgresVersion: 15
+  users:
+    - name: postgres
+    - name: misskey
+      databases:
+        - misskey
+      options: "SUPERUSER"
+  instances:
+    - name: instance1
+      replicas: 2
+      resources:
+        requests:
+          cpu: "0.5"
+          memory: 512M
+      dataVolumeClaimSpec:
+        storageClassName: do-block-storage
+        accessModes:
+        - "ReadWriteOnce"
+        resources:
+          requests:
+            storage: 20Gi
+      affinity:
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+          - weight: 1
+            podAffinityTerm:
+              topologyKey: kubernetes.io/hostname
+              labelSelector:
+                matchLabels:
+                  postgres-operator.crunchydata.com/cluster: misskey
+                  postgres-operator.crunchydata.com/instance-set: pgha1
+  # proxy:
+  #   pgBouncer:
+  #     image: registry.developers.crunchydata.com/crunchydata/crunchy-pgbouncer:ubi8-1.19-0
+  #     replicas: 2
+  #     affinity:
+  #       podAntiAffinity:
+  #         preferredDuringSchedulingIgnoredDuringExecution:
+  #         - weight: 1
+  #           podAffinityTerm:
+  #             topologyKey: kubernetes.io/hostname
+  #             labelSelector:
+  #               matchLabels:
+  #                 postgres-operator.crunchydata.com/cluster: misskey
+  #                 postgres-operator.crunchydata.com/role: pgbouncer
+  backups:
+    pgbackrest:
+      image: registry.developers.crunchydata.com/crunchydata/crunchy-pgbackrest:ubi8-2.45-0
+      configuration:
+      - secret:
+          name: pgo-s3-creds
+      global:
+        repo1-retention-full: "14"
+        repo1-retention-full-type: time
+        repo3-retention-full: "14"
+        repo3-retention-full-type: time
+        repo3-path: /misskey-prod/pgbackup
+        #repo2-s3-uri-style: path
+      manual:
+        repoName: repo3
+        options:
+         - --type=full
+      repos:
+      - name: repo1
+        volume:
+          volumeClaimSpec:
+            storageClassName: do-block-storage
+            accessModes:
+            - "ReadWriteOnce"
+            resources:
+              requests:
+                storage: 10Gi
+        schedules:
+          full: "0 1 * * 0"
+          differential: "0 1 * * 1-6"
+      - name: repo3
+        s3:
+          bucket: nadena-dev-pgbackrest-prod
+          endpoint: https://s3.ap-northeast-1.amazonaws.com
+          #endpoint: https://368cf88dc7d3f67a2b4237481e726be6.r2.cloudflarestorage.com
+          region: ap-northeast-1
+        schedules:
+          full: "0 1 * * 0"
+          differential: "0 1 * * 1-6"
+# kubectl annotate -n misskey postgrescluster misskey-db postgres-operator.crunchydata.com/pgbackrest-backup="$(date)" --overwrite

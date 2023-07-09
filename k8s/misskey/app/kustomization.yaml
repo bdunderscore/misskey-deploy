@@ -1,0 +1,11 @@
+resources:
+- misskey.yaml
+- db-backup.yaml
+
+secretGenerator:
+- name: misskey-db
+  envs:
+  - misskey-db.creds
+- name: db-backup
+  envs:
+  - db-backup-creds.creds
